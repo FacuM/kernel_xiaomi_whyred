@@ -197,6 +197,18 @@ static unsigned hid_lookup_collection(struct hid_parser *parser, unsigned type)
 }
 
 /*
+ * Concatenate usage which defines 16 bits or less with the
+ * currently defined usage page to form a 32 bit usage
+ */
+
+static void complete_usage(struct hid_parser *parser, unsigned int index)
+{
+	parser->local.usage[index] &= 0xFFFF;
+	parser->local.usage[index] |=
+		(parser->global.usage_page & 0xFFFF) << 16;
+}
+
+/*
  * Add a usage to the temporary parser table.
  */
 
@@ -206,6 +218,7 @@ static int hid_add_usage(struct hid_parser *parser, unsigned usage, u8 size)
 		hid_err(parser->device, "usage index exceeded\n");
 		return -1;
 	}
+
 	if (!parser->local.usage_index && parser->global.usage_page)
 		parser->local.usage_page_preceding = 1;
 	if (parser->local.usage_page_preceding == 2)
@@ -215,6 +228,7 @@ static int hid_add_usage(struct hid_parser *parser, unsigned usage, u8 size)
 			(usage & 0xffff) + (parser->global.usage_page << 16);
 	else
 		parser->local.usage[parser->local.usage_index] = usage;
+
 	parser->local.usage_size[parser->local.usage_index] = size;
 	parser->local.collection_index[parser->local.usage_index] =
 		parser->collection_stack_ptr ?
@@ -533,9 +547,11 @@ static int hid_parser_local(struct hid_parser *parser, struct hid_item *item)
  * usage value."
  */
 
-static void hid_concatenate_usage_page(struct hid_parser *parser)
+static void hid_concatenate_last_usage_page(struct hid_parser *parser)
 {
 	int i;
+	unsigned int usage_page;
+	unsigned int current_page;
 
 	if (parser->local.usage_page_preceding == 3) {
 		dbg_hid("Using preceding usage page for final usage\n");
@@ -558,7 +574,7 @@ static int hid_parser_main(struct hid_parser *parser, struct hid_item *item)
 	__u32 data;
 	int ret;
 
-	hid_concatenate_usage_page(parser);
+	hid_concatenate_last_usage_page(parser);
 
 	data = item_udata(item);
 
@@ -773,7 +789,7 @@ static int hid_scan_main(struct hid_parser *parser, struct hid_item *item)
 	__u32 data;
 	int i;
 
-	hid_concatenate_usage_page(parser);
+	hid_concatenate_last_usage_page(parser);
 
 	data = item_udata(item);
 
